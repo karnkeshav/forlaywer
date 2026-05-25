@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LexDeadline – Court Deadline Calculator</title>
+    <style>
+        :root {
+            --bg: #0d1117; --surface: #161b22; --card: #1f2937;
+            --accent: #3b82f6; --danger: #ef4444; --warning: #f59e0b;
+            --safe: #10b981; --past: #6b7280; --text: #f0f6fc; --subtext: #8b949e;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 30px; }
+        .card { background: var(--card); padding: 24px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; }
+        .input-group { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        select, input { width: 100%; padding: 12px; background: var(--surface); border: 1px solid #30363d; color: white; border-radius: 6px; }
+        button { cursor: pointer; width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; background: var(--accent); color: white; transition: 0.3s; }
+        button:hover { opacity: 0.9; }
+        .stat-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        .pill { padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; background: var(--surface); }
+        .deadline-card { display: flex; align-items: center; gap: 15px; background: var(--surface); padding: 15px; margin-bottom: 10px; border-radius: 8px; transition: 0.3s; animation: fadeIn 0.5s ease forwards; border-left: 5px solid var(--past); }
+        .deadline-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .pulse { animation: pulse-red 2s infinite; }
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        .disclaimer { font-size: 0.75rem; color: var(--subtext); text-align: center; margin-top: 40px; }
+        @media print { .no-print { display: none; } body { background: white; color: black; } .card { border: 1px solid #ccc; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚖️ LexDeadline</h1>
+            <p style="color: var(--subtext)">Never miss a court deadline</p>
+        </header>
+
+        <div class="card no-print">
+            <div class="input-group">
+                <select id="caseType">
+                    <option value="civil">Civil Litigation</option>
+                    <option value="pi">Personal Injury</option>
+                    <option value="contract">Contract Dispute</option>
+                    <option value="criminal">Criminal Defense</option>
+                </select>
+                <input type="date" id="triggerDate">
+            </div>
+            <button onclick="calculate()">Calculate Deadlines</button>
+        </div>
+
+        <div id="results" style="display:none">
+            <div class="stat-bar" id="stats"></div>
+            <div id="timeline"></div>
+            <button class="no-print" style="margin-top:20px; background:var(--past)" onclick="window.print()">Print Report</button>
+        </div>
+        <p class="disclaimer">Deadlines shown are estimates based on standard rules. Always verify with your jurisdiction's local rules. Not legal advice.</p>
+    </div>
+
+    <script>
+        const rules = {
+            civil: { label: "Date of Filing", items: [{n:"Serve defendant", d:30}, {n:"Defendant's answer", d:60}, {n:"Initial disclosures", d:90}, {n:"Close of fact discovery", d:180}, {n:"Expert witness disclosures", d:210}, {n:"Close of expert discovery", d:270}, {n:"Dispositive motions", d:300}, {n:"Pre-trial conference", d:330}, {n:"Trial date", d:365}] },
+            pi: { label: "Date of Incident", items: [{n:"Preserve evidence notice", d:7}, {n:"Statute of limitations warning", d:365}, {n:"File complaint", d:730}, {n:"Serve defendant", d:760}, {n:"Fact discovery cutoff", d:900}, {n:"Expert reports due", d:930}, {n:"Trial ready date", d:1095}] },
+            contract: { label: "Date of Breach", items: [{n:"Send demand letter", d:14}, {n:"Statute of limitations warning", d:365}, {n:"Mediation deadline", d:60}, {n:"Discovery cutoff", d:270}, {n:"Trial date", d:400}, {n:"File suit deadline", d:1825}] },
+            criminal: { label: "Date of Arrest", items: [{n:"Arraignment", d:3}, {n:"Bail review", d:7}, {n:"Preliminary hearing", d:14}, {n:"Grand jury / indictment", d:30}, {n:"Discovery request", d:45}, {n:"Pre-trial motions", d:60}, {n:"Plea deadline", d:90}, {n:"Trial date", d:120}] }
+        };
+
+        document.getElementById('triggerDate').valueAsDate = new Date();
+
+        function calculate() {
+            const type = document.getElementById('caseType').value;
+            const trigger = new Date(document.getElementById('triggerDate').value);
+            const timeline = document.getElementById('timeline');
+            const results = document.getElementById('results');
+            timeline.innerHTML = '';
+            results.style.display = 'block';
+
+            let deadlines = rules[type].items.map(i => {
+                let d = new Date(trigger);
+                d.setDate(d.getDate() + i.d);
+                return { ...i, date: d };
+            }).sort((a, b) => a.date - b.date);
+
+            deadlines.forEach((item, idx) => {
+                const now = new Date();
+                const diff = Math.ceil((item.date - now) / (1000 * 60 * 60 * 24));
+                let color = 'var(--safe)', badge = `In ${diff} days`;
+                if (diff < 0) { color = 'var(--past)'; badge = `${Math.abs(diff)} days ago (OVERDUE)`; }
+                else if (diff === 0) { color = 'var(--danger)'; badge = 'TODAY'; }
+                else if (diff <= 7) color = 'var(--danger)';
+                else if (diff <= 30) color = 'var(--warning)';
+
+                const card = document.createElement('div');
+                card.className = 'deadline-card';
+                card.style.borderLeftColor = color;
+                card.style.animationDelay = `${idx * 50}ms`;
+                card.innerHTML = `
+                    <div style="flex-grow:1">
+                        <div style="font-size:0.8rem; color:var(--subtext)">${item.date.toDateString()}</div>
+                        <div style="font-weight:bold">${item.n}</div>
+                    </div>
+                    <div class="pill ${diff === 0 ? 'pulse' : ''}" style="background:${color}; color:white">${badge}</div>
+                `;
+                timeline.appendChild(card);
+            });
+            results.scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
